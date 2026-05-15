@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AAALAY · Live Sales Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     UPLOAD SCREEN — shown on first open
+     (skipped automatically if data/report.csv exists)
+═══════════════════════════════════════ -->
+<div id="uploadScreen">
+  <div class="upload-logo">AAALAY HOSTELS · SALES COMMAND CENTER</div>
+
+  <div class="upload-card">
+    <div class="upload-title">Load Today's Mcube Data</div>
+    <div class="upload-sub">
+      Every morning, Parag downloads the Mcube call report and drops it here.<br>
+      The dashboard calculates everything automatically — no formulas, no typing.
+    </div>
+
+    <!-- 3 Steps -->
+    <div class="steps-grid">
+      <div class="step-box">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Download from Mcube</strong>Go to Reports → Call Reports → Export CSV</div>
+      </div>
+      <div class="step-box">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Drop the file here</strong>Click the box below or drag and drop the CSV file</div>
+      </div>
+      <div class="step-box">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Dashboard loads</strong>All numbers calculate automatically in 2 seconds</div>
+      </div>
+    </div>
+
+    <!-- Drop Zone -->
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".csv">
+      <div class="drop-icon">📂</div>
+      <div class="drop-label">Click to select Mcube CSV file</div>
+      <div class="drop-hint">or drag and drop it here · any Mcube report export works</div>
+    </div>
+
+    <div class="file-name-display" id="fileNameDisplay">✓ &nbsp;<span id="fileNameText"></span></div>
+
+    <button class="load-btn" id="loadBtn" disabled onclick="processCsv()">
+      Load Dashboard →
+    </button>
+
+    <!-- Auto-load note -->
+    <div class="auto-load-banner">
+      <div class="auto-load-title">⚡ Vercel Auto-Load</div>
+      <div class="auto-load-body">
+        On Vercel, place the latest CSV at <strong>data/report.csv</strong> in the repo and the dashboard
+        loads it automatically on page open — no upload needed. Commit a new file each morning to update.
+      </div>
+    </div>
+
+    <div class="col-note">
+      <div class="col-note-title">What columns does it need?</div>
+      <div class="col-note-body">
+        The dashboard reads these columns from your Mcube export automatically:<br>
+        <code>Agent Name</code> &nbsp;<code>Start Time</code> &nbsp;<code>Dial Status</code> &nbsp;<code>Answered Time</code> &nbsp;<code>Call Type</code> &nbsp;<code>Disconnected By</code><br><br>
+        These are all standard Mcube columns — every export has them. Nothing to rename or change.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     DASHBOARD — shown after CSV loads
+═══════════════════════════════════════ -->
+<div id="dashboardScreen" style="display:none;">
+
+  <!-- Verdict strip -->
+  <div class="verdict-strip" id="verdictStrip">Loading...</div>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <div class="nav-brand">AAALAY · LIVE DASHBOARD</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showTab('overview',this)">Overview</button>
+      <button class="nav-tab" onclick="showTab('agents',this)">Agent Scorecard</button>
+      <button class="nav-tab" onclick="showTab('leakage',this)">Leakage</button>
+      <button class="nav-tab" onclick="showTab('timing',this)">Call Timing</button>
+      <button class="nav-tab" onclick="showTab('action',this)">Action Plan</button>
+    </div>
+    <div class="nav-right">
+      <div class="file-pill"><div class="live-dot"></div><span id="navFilename">—</span></div>
+      <button class="reload-btn" onclick="reloadFile()">↺ New File</button>
+    </div>
+  </nav>
+
+  <div class="main">
+
+    <!-- ══ TAB 1: OVERVIEW ══ -->
+    <div class="tab-content active" id="tab-overview">
+      <div class="section-label" id="overviewLabel">Overview</div>
+
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">
+            <div><div class="panel-title">Daily Call Volume vs Answered</div>
+            <div class="panel-sub">How many calls happened each day — and how many were picked up</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap" style="height:200px;"><canvas id="dailyChart"></canvas></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div><div class="panel-title">Call Outcome Split</div>
+            <div class="panel-sub">Where did all the calls go?</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap" style="height:200px;"><canvas id="outcomeChart"></canvas></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;font-size:11px;" id="outcomeSummary"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div><div class="panel-title">Call Duration Quality Funnel</div>
+          <div class="panel-sub">Of all answered calls — how many were real conversations?</div></div>
+          <span class="panel-badge badge-red" id="ghostBadge">—</span>
+        </div>
+        <div class="panel-body">
+          <div class="chart-wrap" style="height:180px;"><canvas id="durationChart"></canvas></div>
+          <div style="margin-top:12px;padding:10px 12px;background:var(--red-bg);border-radius:6px;border:1px solid var(--red-border);" id="durationNote"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TAB 2: AGENTS ══ -->
+    <div class="tab-content" id="tab-agents">
+      <div class="section-label">Agent Scorecard · Ranked by Effective Rate (Quality Calls ÷ Total)</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div><div class="panel-title">Full Agent Productivity Table</div>
+          <div class="panel-sub">Quality Call = answered AND talked > 60 seconds. This is the real metric — not raw dials.</div></div>
+          <span class="panel-badge badge-red" id="agentAlertBadge">—</span>
+        </div>
+        <!-- DATE FILTER BAR -->
+        <div class="date-filter-bar" id="dateFilterBar">
+          <span class="date-filter-label">Filter by date:</span>
+          <span class="date-pill all-pill active" id="pill-all" onclick="applyDateFilter('all',this)">All Dates</span>
+          <div class="date-filter-sep"></div>
+          <div id="datePillsContainer" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"></div>
+          <div class="date-filter-sep"></div>
+          <span class="date-pill till-date" id="pill-tilldate" onclick="applyDateFilter('till',this)" title="Cumulative from first date up to and including selected date">📅 Till Date</span>
+          <span class="filter-summary" id="filterSummary"></span>
+        </div>
+        <div class="panel-body" style="padding:0;">
+          <table class="data-table">
+            <thead><tr>
+              <th>#</th><th>Agent</th>
+              <th class="text-right">Total Calls</th>
+              <th class="text-right">Answered</th>
+              <th class="text-right">Ans %</th>
+              <th class="text-right">Quality &gt;60s</th>
+              <th class="text-right">Ghost &lt;30s</th>
+              <th class="text-right">Talk Mins</th>
+              <th class="text-right">Exec Busy</th>
+              <th class="text-right">Eff Rate</th>
+              <th>Status</th>
+            </tr></thead>
+            <tbody id="agentTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Quality Calls per Agent</div></div>
+          <div class="panel-body"><div class="chart-wrap" style="height:220px;"><canvas id="qualityChart"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Total Talk Time (minutes)</div></div>
+          <div class="panel-body"><div class="chart-wrap" style="height:220px;"><canvas id="talkChart"></canvas></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div><div class="panel-title">Executive Busy — Agent Unavailable Incidents</div>
+          <div class="panel-sub">Calls that arrived while agent was off headset. Each one = a lead lost.</div></div>
+        </div>
+        <div class="panel-body"><div id="execBusyBars"></div></div>
+      </div>
+    </div>
+
+    <!-- ══ TAB 3: LEAKAGE ══ -->
+    <div class="tab-content" id="tab-leakage">
+      <div class="section-label">Lead Leakage — Where Calls Are Being Lost</div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;" id="leakageKpis"></div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">
+            <div><div class="panel-title">Call Quality Funnel</div>
+            <div class="panel-sub">How many calls reached a real conversation?</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap" style="height:220px;"><canvas id="funnelChart"></canvas></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div><div class="panel-title">Ghost Calls by Agent</div>
+            <div class="panel-sub">Answered but dropped under 30s — 100% wasted</div></div>
+          </div>
+          <div class="panel-body"><div id="ghostBars"></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div><div class="panel-title">🔥 Missed Inbound Calls — Call Back Immediately</div>
+          <div class="panel-sub">Parents who called in voluntarily. Hottest leads. Every hour of delay = higher risk of booking with a PG.</div></div>
+          <span class="panel-badge badge-red" id="missedBadge">—</span>
+        </div>
+        <div class="panel-body" style="padding:0;">
+          <table class="data-table">
+            <thead><tr><th>#</th><th>Phone Number</th><th>Time Missed</th><th>Routed To</th><th>Action</th></tr></thead>
+            <tbody id="missedTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div><div class="panel-title">Who Is Disconnecting Early?</div>
+          <div class="panel-sub">Agent-disconnected calls under 30s = agent hanging up on leads</div></div>
+        </div>
+        <div class="panel-body"><div id="discBars"></div></div>
+      </div>
+    </div>
+
+    <!-- ══ TAB 4: TIMING ══ -->
+    <div class="tab-content" id="tab-timing">
+      <div class="section-label">Call Timing Intelligence — Best and Worst Hours</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div><div class="panel-title">Hourly Answer Rate — When Do Leads Pick Up?</div>
+          <div class="panel-sub">Green bars = best windows. Red bar = avoid. Line = answer rate %</div></div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-wrap" style="height:220px;"><canvas id="hourlyChart"></canvas></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px;" id="timingInsights"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Calls by Hour</div><div class="panel-sub">Volume distribution throughout the day</div></div>
+          <div class="panel-body"><div class="chart-wrap" style="height:200px;"><canvas id="volumeHourChart"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Disconnected By</div><div class="panel-sub">Who ends the call reveals call quality</div></div>
+          <div class="panel-body" style="padding-top:16px;"><div id="discByBars"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TAB 5: ACTION PLAN ══ -->
+    <div class="tab-content" id="tab-action">
+      <div class="section-label">Auto-Generated Action Plan — Based on Today's Data</div>
+      <div id="actionPlan"></div>
+
+      <div class="panel" style="margin-top:0;">
+        <div class="panel-header">
+          <div><div class="panel-title">Standup Script — Akash Reads This to the Team</div>
+          <div class="panel-sub">Auto-generated from today's numbers. Copy and read aloud in morning standup.</div></div>
+        </div>
+        <div class="panel-body">
+          <div style="background:var(--surface2);border-radius:6px;padding:16px;border:1px solid var(--border);font-size:12px;line-height:2;" id="standupScript"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <button class="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+</div><!-- /dashboardScreen -->
+
+<script src="dashboard.js"></script>
+</body>
+</html>
